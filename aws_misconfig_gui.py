@@ -158,17 +158,27 @@ def apply_security_group_fixes():
                 for perm in sg['IpPermissions']:
                     for ip_range in perm.get('IpRanges', []):
                         if ip_range['CidrIp'] == '0.0.0.0/0':  # Check for open access
-                            # Remove the overly permissive rule
-                            ec2.revoke_security_group_ingress(
-                                GroupId=sg['GroupId'],
-                                IpPermissions=[{
+                            # Ensure 'FromPort' and 'ToPort' exist before accessing
+                            from_port = perm.get('FromPort', None)  
+                            to_port = perm.get('ToPort', None)
+
+                            revoke_params = {
+                                'GroupId': sg['GroupId'],
+                                'IpPermissions': [{
                                     'IpProtocol': perm['IpProtocol'],
-                                    'FromPort': perm['FromPort'],
-                                    'ToPort': perm['ToPort'],
                                     'IpRanges': [{'CidrIp': '0.0.0.0/0'}]
                                 }]
-                            )
-                            output_text.insert(tk.END, f"Removed open access from Security Group: {sg['GroupName']} ({sg['GroupId']}).\n")  # Log the action
+                            }
+
+                            # Only add port details if they exist
+                            if from_port is not None:
+                                revoke_params['IpPermissions'][0]['FromPort'] = from_port
+                            if to_port is not None:
+                                revoke_params['IpPermissions'][0]['ToPort'] = to_port
+
+                            # Remove the overly permissive rule
+                            ec2.revoke_security_group_ingress(**revoke_params)
+                            output_text.insert(tk.END, f"Removed open access from Security Group: {sg['GroupName']} ({sg['GroupId']}).\n")
     except ClientError as e:
         output_text.insert(tk.END, f"Error applying fixes for Security Groups: {e}\n")  # Handle errors
 
